@@ -726,21 +726,7 @@
       const context = PROBLEM_NAMES[research.activeTab] || "Cross-Task";
       appendMessage("user", `Effort: ${tried}\nQ: ${q}`);
       
-      if (!research.apiKey) {
-        const fallback = "I'm offline right now (no API key). What pattern do you see in the numbers so far?";
-        setTimeout(() => appendMessage("ai", fallback), 600);
-        return;
-      }
-
-      if (!dynamic_groq_key) {
-        await fetchConfig();
-      }
-      
-      if (!dynamic_groq_key) {
-        appendMessage("ai", "System error: Secure AI configuration could not be loaded. Please refresh the page.");
-        return;
-      }
-
+      // If the user already added the key to Vercel, the backend will handle it.
       try {
         const response = await fetch("/api/chat", {
           method: "POST",
@@ -749,8 +735,7 @@
             messages: [
               { role: "system", content: SYSTEM_PROMPT },
               { role: "user", content: `Context: ${context}\nAttempt: ${tried}\nQuestion: ${q}` }
-            ],
-            apiKey: dynamic_groq_key
+            ]
           })
         });
         const data = await response.json();
@@ -759,7 +744,7 @@
         appendMessage("ai", aiResponse);
         syncInteraction(research.activeTab, 'ai_chat', { msg: q, resp: aiResponse, frust: prob.frustrationTime });
       } catch (err) {
-        appendMessage("ai", "I'm having trouble connecting to my brain. Please check your API key.");
+        appendMessage("ai", "I'm having trouble connecting to my brain. Please check your API key in Vercel settings.");
       }
 
       document.getElementById('ai-tried').value = ""; document.getElementById('ai-q').value = "";
