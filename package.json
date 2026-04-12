@@ -20,8 +20,8 @@
   },
   "homepage": "https://github.com/Malik97x/socratic-math-tutor#readme",
   "devDependencies": {
-    "autoprefixer": "^10.4.27",
-    "postcss": "^8.5.9",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17"
   }
 }
