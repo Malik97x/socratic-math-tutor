@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Socratic Math Tutor - Research Study</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; overflow: hidden; height: 100vh; }
+    .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(226, 232, 240, 0.8); }
+    .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; background-color: #eff6ff; }
+    .chat-bubble-ai { background-color: #f1f5f9; border-bottom-left-radius: 4px; }
+    .chat-bubble-user { background-color: #3b82f6; color: white; border-bottom-right-radius: 4px; }
+    .modal-overlay { background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    #scratchpad-canvas { cursor: crosshair; touch-action: none; background: white; }
+    .survey-btn-active { background-color: #3b82f6 !important; color: white !important; border-color: #3b82f6 !important; }
+    
+    /* Pop-up AI Styling */
+    #ai-panel { 
+      position: fixed; bottom: 85px; right: 24px; width: 420px; height: 600px; 
+      z-index: 40; display: none; flex-direction: column; 
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+    }
+    #ai-trigger {
+      z-index: 50;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+      70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col h-screen overflow-hidden">
+
+  <!-- Pre-Study Survey Modal -->
+  <div id="pre-study-modal" class="fixed inset-0 modal-overlay z-[100] flex items-center justify-center">
+    <div class="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-10 transform border border-slate-200">
+      <h2 class="text-2xl font-black mb-1 text-slate-900 uppercase">Pre-Study Survey</h2>
+      <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-8">Tell us about yourself before we begin</p>
+      
+      <div class="space-y-6">
+        <div>
+          <label class="text-[11px] font-black text-slate-700 uppercase block mb-3">Math Confidence (1-5)</label>
+          <div class="flex gap-2" id="pre-conf-btns">
+            <button id="conf-1" onclick="setPreStudy('confidence', 1, 'conf-1')" class="flex-1 py-3 rounded-xl border-2 border-slate-100 font-bold hover:border-blue-400 transition-all">1</button>
+            <button id="conf-2" onclick="setPreStudy('confidence', 2, 'conf-2')" class="flex-1 py-3 rounded-xl border-2 border-slate-100 font-bold hover:border-blue-400 transition-all">2</button>
+            <button id="conf-3" onclick="setPreStudy('confidence', 3, 'conf-3')" class="flex-1 py-3 rounded-xl border-2 border-slate-100 font-bold hover:border-blue-400 transition-all">3</button>
+            <button id="conf-4" onclick="setPreStudy('confidence', 4, 'conf-4')" class="flex-1 py-3 rounded-xl border-2 border-slate-100 font-bold hover:border-blue-400 transition-all">4</button>
+            <button id="conf-5" onclick="setPreStudy('confidence', 5, 'conf-5')" class="flex-1 py-3 rounded-xl border-2 border-slate-100 font-bold hover:border-blue-400 transition-all">5</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-[11px] font-black text-slate-700 uppercase block mb-3">Used AI for homework before?</label>
+          <div class="flex gap-2">
+            <button id="use-yes" onclick="setPreStudy('aiUse', 'Yes', 'use-yes')" class="flex-1 py-3 rounded-xl border-2 border-slate-100 font-bold hover:border-blue-400 transition-all uppercase text-[10px]">Yes</button>
+            <button id="use-no" onclick="setPreStudy('aiUse', 'No', 'use-no')" class="flex-1 py-3 rounded-xl border-2 border-slate-100 font-bold hover:border-blue-400 transition-all uppercase text-[10px]">No</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-[11px] font-black text-slate-700 uppercase block mb-3">Favorite Subject</label>
+          <input type="text" id="pre-fav-subject" oninput="research.preStudy.favoriteSubject = this.value" class="w-full border-2 border-slate-100 rounded-xl p-3 text-sm focus:border-blue-400 outline-none" placeholder="e.g. History, Art...">
+        </div>
+
+        <button onclick="startResearch()" class="w-full bg-slate-900 text-white py-4 rounded-xl font-black text-xs uppercase tracking-tighter shadow-xl transition-all active:scale-95 mt-4">Begin Study Session</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 py-4 px-6 flex-shrink-0">
+    <div class="max-w-screen-2xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+      <div class="text-left cursor-pointer select-none" ondblclick="document.getElementById('tab-data').classList.toggle('hidden')">
+        <h1 class="text-xl font-extrabold tracking-tight text-slate-900 leading-tight">SOCRATIC MATH TUTOR</h1>
+        <p class="text-slate-500 font-medium text-[10px] uppercase tracking-widest">Grade 9-10 | Research Version Control</p>
+      </div>
+      <div class="flex items-center gap-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+        <div id="cloud-status" class="flex items-center gap-2 text-rose-500">
+          <span class="w-2 h-2 rounded-full bg-current animate-pulse"></span>
+          OFFLINE
+        </div>
+        <div id="timer-display" class="flex items-center gap-2">00:00</div>
+        <div class="h-4 w-px bg-slate-200"></div>
+        <div class="flex items-center gap-2 text-emerald-500">
+          <span class="w-2 h-2 rounded-full bg-current"></span>
+          Auto-saved
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-screen-2xl w-full mx-auto p-4 md:p-6 overflow-hidden flex flex-col">
+    <div class="flex-1 flex gap-6 overflow-hidden relative">
+      
+      <!-- Center Column: Problem Content (Now Full Width) -->
+      <div class="flex-1 flex flex-col glass-card rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+        <!-- Top Tabs -->
+        <nav class="flex border-b border-slate-200 bg-slate-50 flex-shrink-0" id="problem-nav">
+          <button onclick="switchTab('p1')" id="tab-p1" class="tab-btn flex-1 py-4 px-2 text-xs font-bold text-slate-600 hover:bg-white transition-all flex items-center justify-center gap-1.5 border-r border-slate-200 uppercase tracking-tighter">
+            Prob 1 <span id="check-p1" class="hidden text-emerald-500">✓</span>
+          </button>
+          <button onclick="switchTab('p2')" id="tab-p2" class="tab-btn flex-1 py-4 px-2 text-xs font-bold text-slate-600 hover:bg-white transition-all flex items-center justify-center gap-1.5 border-r border-slate-200 uppercase tracking-tighter">
+            Prob 2 <span id="check-p2" class="hidden text-emerald-500">✓</span>
+          </button>
+          <button onclick="switchTab('p3')" id="tab-p3" class="tab-btn flex-1 py-4 px-2 text-xs font-bold text-slate-600 hover:bg-white transition-all flex items-center justify-center gap-1.5 border-r border-slate-200 uppercase tracking-tighter">
+            Prob 3 <span id="check-p3" class="hidden text-emerald-500">✓</span>
+          </button>
+          <button onclick="switchTab('p4')" id="tab-p4" class="tab-btn flex-1 py-4 px-2 text-xs font-bold text-slate-600 hover:bg-white transition-all flex items-center justify-center gap-1.5 border-r border-slate-200 uppercase tracking-tighter">
+            Prob 4 <span id="check-p4" class="hidden text-emerald-500">✓</span>
+          </button>
+          <button onclick="switchTab('p5')" id="tab-p5" class="tab-btn flex-1 py-4 px-2 text-xs font-bold text-slate-600 hover:bg-white transition-all flex items-center justify-center gap-1.5 border-r border-slate-200 uppercase tracking-tighter">
+            Prob 5 <span id="check-p5" class="hidden text-emerald-500">✓</span>
+          </button>
+          <button onclick="switchTab('data')" id="tab-data" class="hidden tab-btn bg-slate-100 py-4 px-4 text-xs font-bold text-slate-700 hover:bg-white transition-all uppercase tracking-tighter">
+            📊 Data
+          </button>
+        </nav>
+
+        <div class="flex-1 p-5 overflow-y-auto scrollbar-hide">
+          <!-- Problem 1 -->
+          <div id="content-p1" class="tab-content h-full flex flex-col justify-between">
+            <div>
+              <h2 class="text-xl font-black mb-3 text-slate-900 uppercase">Problem 1: The High Five Problem</h2>
+              <div class="bg-blue-50 border border-blue-100 p-4 rounded-xl mb-4 shadow-sm">
+                <p class="text-[10px] leading-relaxed uppercase font-black mb-1 text-blue-600">Problem Statement</p>
+                <p class="text-slate-700 text-sm mb-3 font-medium">There are 26 people in a room. If every person gives every other person exactly one high five, how many high fives happen in total?</p>
+                <p class="text-[10px] leading-relaxed uppercase font-black mb-1 text-blue-600">Goal Question</p>
+                <p class="text-slate-700 font-bold text-sm">Figure out a formula that works for ANY number of people (n).</p>
+              </div>
+              
+              <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label class="text-[9px] font-black uppercase text-slate-400">Final Answer</label>
+                  <input type="text" oninput="saveWork('p1', 'answer', this.value)" class="w-full border-2 border-slate-100 rounded-lg p-2 text-xs focus:border-blue-400 outline-none" placeholder="Result...">
+                </div>
+                <div>
+                  <label class="text-[9px] font-black uppercase text-slate-400">Show Your Work</label>
+                  <textarea oninput="saveWork('p1', 'work', this.value)" class="w-full h-20 border-2 border-slate-100 rounded-lg p-2 text-xs focus:border-blue-400 outline-none" placeholder="Explain..."></textarea>
+                </div>
+              </div>
+            </div>
+
+            <!-- Problem Controls -->
+            <div class="pt-4 border-t border-slate-100">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex gap-2">
+                  <button onclick="toggleHint('hint-p1')" class="px-4 py-2 rounded-lg border-2 border-slate-200 text-slate-600 font-bold hover:border-blue-400 transition-all text-xs">💡 Hint</button>
+                  <button onclick="openFullScratch()" class="px-4 py-2 rounded-lg border-2 border-blue-100 bg-blue-50 text-blue-600 font-bold hover:bg-blue-100 transition-all text-xs">📝 Scratchpad</button>
+                  <button onclick="openSurveyModal(1)" class="px-4 py-2 bg-emerald-500 text-white font-black rounded-lg hover:bg-emerald-600 transition-all shadow-lg uppercase text-[10px]">Seal & Finish</button>
+                </div>
+              </div>
+              <p class="text-[8px] font-bold text-slate-400 uppercase tracking-widest italic">Archiving work completes the task.</p>
+            </div>
+            <div id="hint-p1" class="hidden mt-6 p-6 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 leading-relaxed shadow-sm font-medium">
+              Start with a smaller number of people. Try 3 people, then 4, then 5. Look for a pattern.
+            </div>          <!-- Problem 2 -->
+          <div id="content-p2" class="tab-content h-full flex flex-col justify-between hidden">
+            <div>
+              <h2 class="text-xl font-black mb-3 text-slate-900 uppercase">Problem 2: The Phone Plan Problem</h2>
+              <div class="bg-blue-50 border border-blue-100 p-4 rounded-xl mb-4 shadow-sm">
+                <p class="text-[10px] leading-relaxed uppercase font-black mb-1 text-blue-600">Problem Statement</p>
+                <p class="text-slate-700 text-sm mb-3 font-medium"><strong>Phone Plan A:</strong> $30 per month + $0.10 per minute.<br><strong>Phone Plan B:</strong> $50 per month + $0.05 per minute.</p>
+                <p class="text-[10px] leading-relaxed uppercase font-black mb-1 text-blue-600">Goal Questions</p>
+                <ul class="list-disc pl-5 text-slate-700 font-bold text-sm space-y-0.5">
+                  <li>How many minutes make Plan B cheaper than Plan A?</li>
+                  <li>Can you find a rule that works for ANY two phone plans?</li>
+                </ul>
+              </div>
+              <div class="grid grid-cols-2 gap-4 mb-4">
+                <input type="text" oninput="saveWork('p2', 'answer', this.value)" class="w-full border-2 border-slate-100 rounded-lg p-2 text-xs focus:border-blue-400 outline-none h-10" placeholder="Final Answer...">
+                <textarea oninput="saveWork('p2', 'work', this.value)" class="w-full h-24 border-2 border-slate-100 rounded-lg p-2 text-xs focus:border-blue-400 outline-none" placeholder="Show work..."></textarea>
+              </div>
+            </div>
+            <!-- Problem Controls -->
+            <div class="pt-4 border-t border-slate-100">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex gap-2">
+                  <button onclick="toggleHint('hint-p2')" class="px-4 py-2 rounded-lg border-2 border-slate-200 text-slate-600 font-bold text-xs hover:border-blue-400">💡 Hint</button>
+                  <button onclick="openFullScratch()" class="px-4 py-2 rounded-lg border-2 border-blue-100 bg-blue-50 text-blue-600 font-bold text-xs hover:bg-blue-100">📝 Scratchpad</button>
+                  <button onclick="openSurveyModal(2)" class="px-4 py-2 bg-emerald-500 text-white font-black rounded-lg hover:bg-emerald-600 shadow-lg uppercase text-[10px]">Seal & Finish</button>
+                </div>
+              </div>
+            </div>
+            </div>
+          </div>
+
+          <!-- Problem 3 -->
+          <div id="content-p3" class="tab-content h-full flex flex-col justify-between hidden">
+            <div>
+              <h2 class="text-xl font-black mb-3 text-slate-900 uppercase">Problem 3: Exploding Dots (Bases)</h2>
+              <div class="bg-blue-50 border border-blue-100 p-4 rounded-xl mb-4 shadow-sm">
+                <p class="text-[10px] leading-relaxed uppercase font-black mb-1 text-blue-600">Problem Statement</p>
+                <ul class="list-disc pl-5 text-slate-700 font-bold text-sm space-y-1">
+                  <li><strong>Part A:</strong> Write the number 13 in base 2.</li>
+                  <li><strong>Part B:</strong> Write the number 13 in base 3.</li>
+                  <li><strong>Part C:</strong> Choose your own base (between 2-9). Write 13 in that base. Explain your method.</li>
+                </ul>
+              </div>
+              <div class="grid grid-cols-2 gap-4 mb-4">
+                <input type="text" oninput="saveWork('p3', 'answer', this.value)" class="w-full border-2 border-slate-100 rounded-lg p-2 text-xs focus:border-blue-400 outline-none h-10" placeholder="Result...">
+                <textarea oninput="saveWork('p3', 'work', this.value)" class="w-full h-24 border-2 border-slate-100 rounded-lg p-2 text-xs focus:border-blue-400 outline-none" placeholder="Show steps..."></textarea>
+              </div>
+            </div>
+            <!-- Problem Controls -->
+            <div class="pt-4 border-t border-slate-100">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex gap-2">
+                  <button onclick="toggleHint('hint-p3')" class="px-4 py-2 rounded-lg border-2 border-slate-200 text-slate-600 font-bold text-xs hover:border-blue-400">💡 Hint</button>
+                  <button onclick="openFullScratch()" class="px-4 py-2 rounded-lg border-2 border-blue-100 bg-blue-50 text-blue-600 font-bold text-xs hover:bg-blue-100">📝 Scratchpad</button>
+                  <button onclick="openSurveyModal(3)" class="px-4 py-2 bg-emerald-500 text-white font-black rounded-lg hover:bg-emerald-600 shadow-lg uppercase text-[10px]">Seal & Finish</button>
+                </div>
+              </div>
+            </div>
+            <div id="hint-p3" class="hidden mt-2 p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs">Find largest power of 2, subtract, repeat.</div>
+          </div>
+
+          <!-- Problem 4 -->
+          <div id="content-p4" class="tab-content h-full flex flex-col justify-between hidden">
+            <div>
+              <h2 class="text-xl font-black mb-3 text-slate-900 uppercase">Problem 4: The Staircase Problem</h2>
+              <div class="bg-blue-50 border border-blue-100 p-4 rounded-xl mb-4 shadow-sm">
+                <p class="text-[10px] leading-relaxed uppercase font-black mb-1 text-blue-600">Problem Statement</p>
+                <p class="text-slate-700 text-xs mb-3 font-medium leading-relaxed">A staircase has 1 block in the 1st step, 2 in the 2nd, 3 in the 3rd, and so on.</p>
+                <ul class="list-disc pl-5 text-slate-700 font-bold text-sm space-y-1">
+                  <li><strong>Part A:</strong> Total blocks in a staircase with 10 steps?</li>
+                  <li><strong>Part B:</strong> Formula for total blocks with n steps.</li>
+                  <li><strong>Part C:</strong> How many steps can you build with 1,000 blocks?</li>
+                </ul>
+              </div>
+              <div class="grid grid-cols-2 gap-4 mb-4">
+                <input type="text" oninput="saveWork('p4', 'answer', this.value)" class="w-full border-2 border-slate-100 rounded-lg p-2 text-xs focus:border-blue-400 outline-none h-10" placeholder="Paths...">
+                <textarea oninput="saveWork('p4', 'work', this.value)" class="w-full h-24 border-2 border-slate-100 rounded-lg p-2 text-xs focus:border-blue-400 outline-none" placeholder="Show work..."></textarea>
+              </div>
+            </div>
+            <div class="pt-4 border-t border-slate-100">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex gap-2">
+                  <button onclick="toggleHint('hint-p4')" class="px-4 py-2 rounded-lg border-2 border-slate-200 text-slate-600 font-bold text-xs hover:border-blue-400">💡 Hint</button>
+                  <button onclick="openFullScratch()" class="px-4 py-2 rounded-lg border-2 border-blue-100 bg-blue-50 text-blue-600 font-bold text-xs hover:bg-blue-100">📝 Scratchpad</button>
+                  <button onclick="openSurveyModal(4)" class="px-4 py-2 bg-emerald-500 text-white font-black rounded-lg hover:bg-emerald-600 shadow-lg uppercase text-[10px]">Seal & Finish</button>
+                </div>
+              </div>
+            </div>
+            <div id="hint-p4" class="hidden mt-2 p-4 bg-amber-50 border rounded-xl text-xs">Look for the Fibonacci pattern.</div>
+          </div>
+
+          <!-- Problem 5 -->
+          <div id="content-p5" class="tab-content h-full flex flex-col justify-between hidden">
+            <div>
+              <h2 class="text-xl font-black mb-3 text-slate-900 uppercase">Problem 5: The Dice Sum Problem</h2>
+              <div class="bg-blue-50 border border-blue-100 p-4 rounded-xl mb-4 shadow-sm">
+                <p class="text-[10px] leading-relaxed uppercase font-black mb-1 text-blue-600">Problem Statement</p>
+                <p class="text-slate-700 text-xs mb-3 font-medium leading-relaxed">You roll two dice and add the numbers together.</p>
+                <ul class="list-disc pl-5 text-slate-700 font-bold text-sm space-y-1">
+                  <li><strong>Part A:</strong> Most likely sum? Why?</li>
+                  <li><strong>Part B:</strong> In 100 rolls, which sum do you expect most?</li>
+                  <li><strong>Part C:</strong> Is sum 7 more likely than sum 2? By how much?</li>
+                </ul>
+              </div>
+              <div class="grid grid-cols-2 gap-4 mb-4">
+                <input type="text" oninput="saveWork('p5', 'answer', this.value)" class="w-full border-2 border-slate-100 rounded-lg p-2 text-xs focus:border-blue-400 outline-none h-10" placeholder="Sum & Likelihood...">
+                <textarea oninput="saveWork('p5', 'work', this.value)" class="w-full h-24 border-2 border-slate-100 rounded-lg p-2 text-xs focus:border-blue-400 outline-none" placeholder="Reasoning..."></textarea>
+              </div>
+            </div>
+            <div class="pt-4 border-t border-slate-100">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex gap-2">
+                  <button onclick="toggleHint('hint-p5')" class="px-4 py-2 rounded-lg border-2 border-slate-200 text-slate-600 font-bold text-xs hover:border-blue-400">💡 Hint</button>
+                  <button onclick="openFullScratch()" class="px-4 py-2 rounded-lg border-2 border-blue-100 bg-blue-50 text-blue-600 font-bold text-xs hover:bg-blue-100">📝 Scratchpad</button>
+                  <button onclick="openSurveyModal(5)" class="px-4 py-2 bg-emerald-500 text-white font-black rounded-lg hover:bg-emerald-600 shadow-lg uppercase text-[10px]">Seal & Finish</button>
+                </div>
+              </div>
+            </div>
+            <div id="hint-p5" class="hidden mt-2 p-4 bg-amber-50 border rounded-xl text-xs">Count outcomes out of 36.</div>
+          </div>
+
+          <!-- Data Collection View -->
+          <div id="content-data" class="tab-content hidden space-y-6">
+            <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200 grid grid-cols-2 gap-4 shadow-inner">
+               <div class="flex flex-col"><label class="text-[9px] font-black uppercase text-slate-400 mb-1">Session ID</label><div id="data-session-id" class="text-xs font-mono font-bold text-slate-700"></div></div>
+               <div class="flex flex-col"><label class="text-[9px] font-black uppercase text-slate-400 mb-1">Student ID</label><input type="text" id="data-student-id" class="text-xs border p-2 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-400" placeholder="Anonymized ID..."></div>
+            </div>
+            <div class="overflow-x-auto border border-slate-200 rounded-2xl bg-white shadow-sm">
+              <table class="w-full text-[11px] text-left">
+                <thead class="bg-slate-50 border-b"><tr class="text-[9px] text-slate-500 uppercase font-black"><th class="p-4">Time</th><th class="p-4">Prob</th><th class="p-4">AI Log Item</th></tr></thead>
+                <tbody id="data-ai-log-body"></tbody>
+              </table>
+            </div>
+            <textarea id="data-notes" class="w-full h-32 text-xs p-4 border-2 border-slate-100 rounded-2xl outline-none focus:border-blue-300 shadow-inner" placeholder="Qualitative observations go here..."></textarea>
+            <div class="flex flex-wrap gap-3">
+              <button onclick="exportCSV()" class="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-bold hover:brightness-125 transition-all text-[11px] uppercase tracking-tighter">Export CSV</button>
+              <button onclick="clearSession()" class="text-rose-600 font-bold hover:underline ml-auto text-[11px] uppercase tracking-tighter">Factory Reset</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Full-Page A4 Scratchpad Modal -->
+      <div id="scratchpad-modal" class="fixed inset-0 modal-overlay z-[60] flex items-center justify-center hidden">
+        <div class="bg-[#f3f4f6] w-[100vw] h-[100vh] flex flex-col p-8 animate-in fade-in zoom-in duration-300">
+          <div class="max-w-[1000px] w-full mx-auto flex-1 flex flex-col gap-6">
+            <div class="flex justify-between items-center">
+              <div>
+                <h2 class="text-xl font-black text-slate-900 uppercase">Digital Scratchpad</h2>
+                <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">A4 Workspace | Data Saved Automatically</p>
+              </div>
+              <div class="flex gap-3">
+                <button onclick="clearCanvas()" class="px-5 py-2 bg-rose-100 text-rose-600 font-bold rounded-xl hover:bg-rose-200 transition-all text-xs">Clear Canvas</button>
+                <button onclick="closeFullScratch()" class="px-8 py-2 bg-slate-900 text-white font-bold rounded-xl hover:brightness-125 transition-all text-xs">Back to Problem</button>
+              </div>
+            </div>
+            
+            <div class="flex-1 bg-white shadow-2xl rounded-sm border border-slate-200 relative overflow-hidden" style="aspect-ratio: 1 / 1.414;">
+              <canvas id="scratchpad-canvas" class="absolute inset-0 w-full h-full"></canvas>
+            </div>
+
+            <textarea id="scratchpad-text" oninput="saveScratchText()" class="h-32 w-full bg-white border border-slate-200 rounded-xl p-6 text-sm outline-none focus:ring-2 focus:ring-blue-400 shadow-lg" placeholder="Type quick notes or final calculations here..."></textarea>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- Floating AI Trigger -->
+      <button id="ai-trigger" onclick="toggleAI()" class="group fixed bottom-[85px] right-[24px] bg-blue-600 text-white rounded-full flex items-center gap-3 px-6 h-16 shadow-2xl hover:bg-blue-700 transition-all border-4 border-white z-50">
+        <span class="text-xs font-black uppercase tracking-tighter">Need help? Ask AI</span>
+        <span class="text-3xl">🤖</span>
+      </button>
+
+      <!-- Right Column: Permanent AI Split (Now Pop-up) -->
+      <div id="ai-panel" class="flex flex-col glass-card rounded-2xl overflow-hidden border border-slate-200">
+        <div class="bg-slate-900 py-4 px-6 flex-shrink-0 flex justify-between items-center cursor-move">
+          <h3 class="text-white font-black text-sm uppercase tracking-widest flex items-center gap-2">
+            <span class="text-xl">🤖</span> AI Assistant
+          </h3>
+          <button onclick="toggleAI()" class="text-slate-400 hover:text-white font-bold">✕</button>
+        </div>
+        <div class="px-6 py-2 bg-slate-800 text-[9px] text-slate-400 uppercase font-black tracking-widest" id="ai-active-status">Context: Prob 1</div>
+        
+        <div class="flex-1 overflow-y-auto p-6 space-y-4 bg-white scrollbar-hide" id="chat-history">
+           <div class="flex justify-start">
+             <div class="chat-bubble-ai p-4 max-w-[85%] shadow-sm text-sm leading-relaxed text-slate-700">
+               Hello! I'm here to help you think through these problems. Tell me about your strategy for <strong id="ai-intro-context">Problem 1</strong>.
+             </div>
+           </div>
+        </div>
+
+        <div class="p-6 bg-slate-50 border-t border-slate-200 flex-shrink-0 space-y-4">
+          <div class="grid grid-cols-1 gap-4">
+            <div class="space-y-1">
+              <label class="text-[10px] uppercase font-black text-slate-400 tracking-wider">What have you tried so far?</label>
+              <textarea id="ai-tried" class="w-full text-sm p-4 border border-slate-200 rounded-2xl h-20 shadow-inner bg-white focus:ring-2 focus:ring-blue-400 outline-none" placeholder="Required for help..."></textarea>
+            </div>
+            <div class="space-y-1">
+              <label class="text-[10px] uppercase font-black text-slate-400 tracking-wider">Your Question</label>
+              <textarea id="ai-q" class="w-full text-sm p-4 border border-slate-200 rounded-2xl h-20 shadow-inner bg-white focus:ring-2 focus:ring-blue-400 outline-none" placeholder="What specifically are you stuck on?"></textarea>
+            </div>
+          </div>
+          <button onclick="askAI()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-tighter hover:bg-blue-700 shadow-lg transition-all active:scale-95">Inquire with Assistant</button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Navigation Dots Footer -->
+  <footer class="bg-slate-900 border-t border-slate-800 text-slate-500 py-4 px-6 flex-shrink-0">
+    <div class="max-w-screen-2xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-10 font-bold text-[10px] tracking-widest" id="footer-dots">
+        <span class="text-white brightness-125 uppercase font-black">PROGRESS MATRIX:</span>
+        <div class="flex gap-8">
+          <span id="dot-1" class="flex items-center gap-2 opacity-40 transition-opacity"><span class="w-3.5 h-3.5 border-2 border-white rounded-sm"></span> TASK 1</span>
+          <span id="dot-2" class="flex items-center gap-2 opacity-40 transition-opacity"><span class="w-3.5 h-3.5 border-2 border-white rounded-sm"></span> TASK 2</span>
+          <span id="dot-3" class="flex items-center gap-2 opacity-40 transition-opacity"><span class="w-3.5 h-3.5 border-2 border-white rounded-sm"></span> TASK 3</span>
+          <span id="dot-4" class="flex items-center gap-2 opacity-40 transition-opacity"><span class="w-3.5 h-3.5 border-2 border-white rounded-sm"></span> TASK 4</span>
+          <span id="dot-5" class="flex items-center gap-2 opacity-40 transition-opacity"><span class="w-3.5 h-3.5 border-2 border-white rounded-sm"></span> TASK 5</span>
+        </div>
+      </div>
+      <div class="text-[9px] font-mono text-slate-700 hidden md:block" id="footer-session-id-display"></div>
+    </div>
+  </footer>
+
+  <!-- Survey Modal -->
+  <div id="survey-modal" class="fixed inset-0 modal-overlay z-50 flex items-center justify-center hidden">
+    <div class="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-10 transform border border-slate-200">
+      <h2 class="text-2xl font-black mb-1 text-slate-900 uppercase">Seal Task Data</h2>
+      <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-10">Problem <span id="survey-prob-id"></span> Verification</p>
+      
+      <div class="space-y-6">
+        <div class="survey-q" data-q="1">
+          <p class="text-[11px] font-black text-slate-700 mb-3 uppercase">In control of my learning:</p>
+          <div class="flex justify-between items-center gap-2">
+            <span class="text-[8px] font-bold text-slate-300 uppercase">Disagree</span>
+            <div class="flex gap-1.5">
+              <button id="post-q1-1" onclick="setSurveyVal(event, 1, 1, 'post-q1-1')" class="w-9 h-9 rounded-xl border-2 border-slate-100 hover:border-blue-400 font-bold transition-all text-xs">1</button>
+              <button id="post-q1-2" onclick="setSurveyVal(event, 1, 2, 'post-q1-2')" class="w-9 h-9 rounded-xl border-2 border-slate-100 hover:border-blue-400 font-bold transition-all text-xs">2</button>
+              <button id="post-q1-3" onclick="setSurveyVal(event, 1, 3, 'post-q1-3')" class="w-9 h-9 rounded-xl border-2 border-slate-100 hover:border-blue-400 font-bold transition-all text-xs">3</button>
+              <button id="post-q1-4" onclick="setSurveyVal(event, 1, 4, 'post-q1-4')" class="w-9 h-9 rounded-xl border-2 border-slate-100 hover:border-blue-400 font-bold transition-all text-xs">4</button>
+              <button id="post-q1-5" onclick="setSurveyVal(event, 1, 5, 'post-q1-5')" class="w-9 h-9 rounded-xl border-2 border-slate-100 hover:border-blue-400 font-bold transition-all text-xs">5</button>
+            </div>
+            <span class="text-[8px] font-bold text-slate-300 uppercase">Agree</span>
+          </div>
+        </div>
+        <div class="survey-q" data-q="2">
+          <p class="text-[11px] font-black text-slate-700 mb-3 uppercase">Struggle was productive:</p>
+          <div class="flex justify-between items-center gap-2">
+            <span class="text-[8px] font-bold text-slate-300 uppercase">Disagree</span>
+            <div class="flex gap-1.5">
+              <button id="post-q2-1" onclick="setSurveyVal(event, 2, 1, 'post-q2-1')" class="w-9 h-9 rounded-xl border-2 border-slate-100 hover:border-blue-400 font-bold transition-all text-xs">1</button>
+              <button id="post-q2-2" onclick="setSurveyVal(event, 2, 2, 'post-q2-2')" class="w-9 h-9 rounded-xl border-2 border-slate-100 hover:border-blue-400 font-bold transition-all text-xs">2</button>
+              <button id="post-q2-3" onclick="setSurveyVal(event, 2, 3, 'post-q2-3')" class="w-9 h-9 rounded-xl border-2 border-slate-100 hover:border-blue-400 font-bold transition-all text-xs">3</button>
+              <button id="post-q2-4" onclick="setSurveyVal(event, 2, 4, 'post-q2-4')" class="w-9 h-9 rounded-xl border-2 border-slate-100 hover:border-blue-400 font-bold transition-all text-xs">4</button>
+              <button id="post-q2-5" onclick="setSurveyVal(event, 2, 5, 'post-q2-5')" class="w-9 h-9 rounded-xl border-2 border-slate-100 hover:border-blue-400 font-bold transition-all text-xs">5</button>
+            </div>
+            <span class="text-[8px] font-bold text-slate-300 uppercase">Agree</span>
+          </div>
+        </div>
+        <textarea id="survey-comment" class="w-full border-2 border-slate-100 rounded-2xl p-4 text-xs h-20 shadow-inner outline-none focus:border-blue-300" placeholder="Narrative thought or breakthrough moment..."></textarea>
+        <button onclick="submitSurvey()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-tighter shadow-xl transition-all active:scale-95">Complete Problem Archive</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PROBLEM_NAMES = { p1: "High Five", p2: "Phone Plan", p3: "Number Bases", p4: "Staircase", p5: "Dice Sum" };
+    const SYSTEM_PROMPT = "You are a Socratic Math Tutor. Never give direct answers. Only ask guiding questions to help the student find the answer themselves. If they are stuck, provide a bridge question. Keep responses short and encouraging.";
+    
+    let research = JSON.parse(localStorage.getItem('math_research_v5')) || {
+      sessionId: "SESS_" + new Date().toISOString().replace(/T/, '_').replace(/[:\-]/g, '').split('.')[0],
+      studentId: "", startTime: Date.now(), totalTime: 0, notes: "", activeTab: "p1",
+      preStudy: { confidence: 0, aiUse: "", favoriteSubject: "" },
+      problems: { 
+        p1: { status: "Not started", time: 0, survey: null, order: 0, frustrationTime: null, focusTime: null, answer: "", work: "" }, 
+        p2: { status: "Not started", time: 0, survey: null, order: 0, frustrationTime: null, focusTime: null, answer: "", work: "" }, 
+        p3: { status: "Not started", time: 0, survey: null, order: 0, frustrationTime: null, focusTime: null, answer: "", work: "" }, 
+        p4: { status: "Not started", time: 0, survey: null, order: 0, frustrationTime: null, focusTime: null, answer: "", work: "" },
+        p5: { status: "Not started", time: 0, survey: null, order: 0, frustrationTime: null, focusTime: null, answer: "", work: "" } 
+      },
+      aiLog: [],
+      scratchpad: { text: "", draw: "" },
+      apiKey: ""
+    };
+
+    // Reset session-specific timers on every load for research accuracy
+    research.startTime = Date.now();
+    research.totalTime = 0;
+    Object.keys(research.problems).forEach(pid => {
+      if (research.problems[pid].status !== "Completed") {
+        research.problems[pid].time = 0;
+      }
+    });
+
+    let surveyBuffer = { q1: 0, q2: 0, probId: null };
+    let lastTick = Date.now();
+    let isDrawing = false;
+    let canvas, ctx;
+
+    function init() {
+      if (research.preStudy.confidence) {
+        document.getElementById('pre-study-modal').classList.add('hidden');
+      }
+      
+      initCanvas();
+      shuffleProblems();
+      
+      document.getElementById('data-session-id').innerText = research.sessionId;
+      document.getElementById('footer-session-id-display').innerText = research.sessionId;
+      document.getElementById('data-student-id').value = research.studentId;
+      document.getElementById('data-notes').value = research.notes;
+      document.getElementById('scratchpad-text').value = research.scratchpad.text;
+      
+      setInterval(tick, 1000); 
+      setInterval(autoSave, 10000);
+      renderUI();
+      
+      document.getElementById('data-student-id').addEventListener('input', e => { research.studentId = e.target.value; });
+      document.getElementById('data-notes').addEventListener('input', e => { research.notes = e.target.value; });
+    }
+
+    function initCanvas() {
+      canvas = document.getElementById('scratchpad-canvas');
+      ctx = canvas.getContext('2d');
+      // Set fixed size for consistency
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+      
+      if (research.scratchpad.draw) {
+        const img = new Image();
+        img.onload = () => ctx.drawImage(img, 0, 0);
+        img.src = research.scratchpad.draw;
+      }
+
+      const start = (e) => { isDrawing = true; draw(e); };
+      const end = () => { isDrawing = false; ctx.beginPath(); saveCanvas(); };
+      const draw = (e) => {
+        if (!isDrawing) return;
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = '#3b82f6';
+        
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX || e.touches[0].clientX) - rect.left;
+        const y = (e.clientY || e.touches[0].clientY) - rect.top;
+        
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+      };
+
+      canvas.addEventListener('mousedown', start);
+      canvas.addEventListener('mousemove', draw);
+      canvas.addEventListener('mouseup', end);
+      canvas.addEventListener('touchstart', (e) => { e.preventDefault(); start(e); });
+      canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); });
+      canvas.addEventListener('touchend', end);
+    }
+
+    function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); saveCanvas(); }
+    function saveCanvas() { research.scratchpad.draw = canvas.toDataURL(); }
+    function saveScratchText() { research.scratchpad.text = document.getElementById('scratchpad-text').value; }
+
+    function setPreStudy(field, val, btnId) {
+      research.preStudy[field] = val;
+      const group = field === 'confidence' ? ['conf-1','conf-2','conf-3','conf-4','conf-5'] : ['use-yes','use-no'];
+      group.forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) {
+          if (id === btnId) btn.classList.add('survey-btn-active');
+          else btn.classList.remove('survey-btn-active');
+        }
+      });
+      autoSave();
+    }
+
+    function startResearch() {
+      if (!research.preStudy.confidence || !research.preStudy.aiUse || !research.preStudy.favoriteSubject) {
+        alert("Please complete the pre-study survey."); return;
+      }
+      fetchConfig();
+      document.getElementById('pre-study-modal').classList.add('hidden');
+      autoSave();
+    }
+
+    function saveWork(pid, field, val) {
+      research.problems[pid][field] = val;
+    }
+
+    function shuffleProblems() {
+      // Logic removed to keep fixed order 1-5
+      const ids = ['p1', 'p2', 'p3', 'p4', 'p5'];
+      ids.forEach((id, idx) => { research.problems[id].order = idx + 1; });
+      research.activeTab = 'p1';
+    }
+
+    function tick() {
+      const now = Date.now(); const delta = Math.floor((now - lastTick) / 1000); lastTick = now;
+      research.totalTime += delta;
+      if (research.problems[research.activeTab] && research.problems[research.activeTab].status !== "Completed") {
+        research.problems[research.activeTab].status = "In progress";
+        research.problems[research.activeTab].time += delta;
+      }
+      document.getElementById('timer-display').innerText = formatTime(research.totalTime);
+    }
+
+    function formatTime(sec) { return `${Math.floor(sec / 60).toString().padStart(2, '0')}:${(sec % 60).toString().padStart(2, '0')}`; }
+
+    function switchTab(id) { 
+      research.activeTab = id; 
+      renderUI(); 
+      // Important to resize canvas if hidden before
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+      if (research.scratchpad.draw) {
+        const img = new Image();
+        img.onload = () => ctx.drawImage(img, 0, 0);
+        img.src = research.scratchpad.draw;
+      }
+    }
+
+    function renderUI() {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('tab-active'); if (btn.id === 'tab-' + research.activeTab) btn.classList.add('tab-active');
+      });
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+      document.getElementById('content-' + research.activeTab).classList.remove('hidden');
+      
+      const probOnly = PROBLEM_NAMES[research.activeTab];
+      document.getElementById('ai-active-status').innerText = probOnly ? `Context: ${probOnly}` : "Context: General Data";
+      if (probOnly) {
+        document.getElementById('ai-intro-context').innerText = probOnly;
+        // Sync Answer/Work fields if they exist in the current tab's DOM
+        const container = document.getElementById('content-' + research.activeTab);
+        const ansInput = container.querySelector('input[type="text"]');
+        const workArea = container.querySelector('textarea');
+        if (ansInput) ansInput.value = research.problems[research.activeTab].answer || "";
+        if (workArea) workArea.value = research.problems[research.activeTab].work || "";
+      }
+
+      Object.keys(research.problems).forEach(pid => {
+        const check = document.getElementById('check-' + pid);
+        const dot = document.getElementById('dot-' + pid.replace('p',''));
+        if (research.problems[pid].status === "Completed") {
+          check.classList.remove('hidden'); dot.classList.remove('opacity-40');
+          dot.querySelector('span').classList.add('bg-blue-500', 'border-blue-500');
+        }
+      });
+      renderAILogs();
+    }
+
+    function toggleHint(id) { document.getElementById(id).classList.toggle('hidden'); }
+
+    function openSurveyModal(n) {
+      surveyBuffer = { q1: 0, q2: 0, probId: 'p' + n };
+      document.getElementById('survey-prob-id').innerText = n;
+      document.getElementById('survey-comment').value = "";
+      document.querySelectorAll('.survey-q button').forEach(b => b.classList.remove('bg-blue-600', 'text-white'));
+      document.getElementById('survey-modal').classList.remove('hidden');
+    }
+
+    function setSurveyVal(e, qIdx, val, btnId) {
+      surveyBuffer['q'+qIdx] = val;
+      const qGroup = qIdx === 1 ? ['post-q1-1','post-q1-2','post-q1-3','post-q1-4','post-q1-5'] : ['post-q2-1','post-q2-2','post-q2-3','post-q2-4','post-q2-5'];
+      qGroup.forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) {
+          if (id === btnId) btn.classList.add('survey-btn-active');
+          else btn.classList.remove('survey-btn-active');
+        }
+      });
+    }
+
+    function submitSurvey() {
+      if (!surveyBuffer.q1 || !surveyBuffer.q2) { alert("Please complete ratings."); return; }
+      const prob = research.problems[surveyBuffer.probId];
+      prob.status = "Completed";
+      prob.focusTime = Date.now();
+      prob.survey = { scores: [surveyBuffer.q1, surveyBuffer.q2], comment: document.getElementById('survey-comment').value };
+      document.getElementById('survey-modal').classList.add('hidden');
+      syncInteraction(surveyBuffer.probId, 'survey', { answer: prob.answer, work: prob.work, focus: prob.focusTime });
+      autoSave(); renderUI();
+    }
+
+    // --- Cloud Setup ---
+    const supabaseUrl = 'https://vhbmebjtfrbzlegeqgov.supabase.co';
+    const supabaseKey = 'sb_publishable_q-EM8f0hVz1LYcjZB4rqgg_P6h-lPrI';
+    const supabaseClient = (typeof supabase !== 'undefined') ? supabase.createClient(supabaseUrl, supabaseKey) : null;
+    let dynamic_groq_key = "";
+
+    async function fetchConfig() {
+      if (!supabaseClient) return;
+      const { data, error } = await supabaseClient.from('config').select('groq_key').eq('id', 1).single();
+      if (data) dynamic_groq_key = data.groq_key;
+    }
+
+    async function syncSession() {
+      if (!supabaseClient) return;
+      try {
+        const { error } = await supabaseClient
+          .from('sessions')
+          .upsert({
+            session_id: research.sessionId,
+            confidence: research.preStudy.confidence,
+            ai_prev_use: research.preStudy.aiUse,
+            fav_subject: research.preStudy.favoriteSubject,
+            total_time: research.totalTime,
+            last_updated: new Date().toISOString()
+          }, { onConflict: 'session_id' });
+        
+        const status = document.getElementById('cloud-status');
+        if (error) {
+          status.innerText = "CLOUD ERROR";
+          status.classList.replace('text-emerald-500', 'text-rose-500');
+        } else {
+          status.innerText = "CLOUD SYNCED";
+          status.classList.replace('text-rose-500', 'text-emerald-500');
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    async function syncInteraction(pid, type, data) {
+      if (!supabaseClient) return;
+      try {
+        await supabaseClient
+          .from('interactions')
+          .insert({
+            session_id: research.sessionId,
+            problem_id: pid,
+            type: type,
+            student_msg: data.msg || null,
+            ai_resp: data.resp || null,
+            final_answer: data.answer || null,
+            work_steps: data.work || null,
+            frustration_ts: data.frust || null,
+            focus_ts: data.focus || null
+          });
+      } catch (e) { console.error(e); }
+    }
+    // ---------------------
+
+    async function askAI() {
+      const tried = document.getElementById('ai-tried').value.trim();
+      const q = document.getElementById('ai-q').value.trim();
+      
+      // Validation
+      const badWords = ["nothing", "idk", "no", "i don't know", "none"];
+      if (!tried || !q) { alert("Please fill both descriptors."); return; }
+      if (tried.length < 10 || badWords.includes(tried.toLowerCase())) {
+        alert("Please describe an actual attempt. 'idk' or short answers are not enough for the research study.");
+        return;
+      }
+
+      const prob = research.problems[research.activeTab];
+      const keywords = ["stuck", "don't get it", "dont get it", "help", "frustrated"];
+      if (keywords.some(k => q.toLowerCase().includes(k)) && !prob.frustrationTime) {
+        prob.frustrationTime = Date.now();
+      }
+
+      const context = PROBLEM_NAMES[research.activeTab] || "Cross-Task";
+      appendMessage("user", `Effort: ${tried}\nQ: ${q}`);
+      
+      if (!research.apiKey) {
+        const fallback = "I'm offline right now (no API key). What pattern do you see in the numbers so far?";
+        setTimeout(() => appendMessage("ai", fallback), 600);
+        return;
+      }
+
+      if (!dynamic_groq_key) {
+        await fetchConfig();
+      }
+      
+      if (!dynamic_groq_key) {
+        appendMessage("ai", "System error: Secure AI configuration could not be loaded. Please refresh the page.");
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content: `Context: ${context}\nAttempt: ${tried}\nQuestion: ${q}` }
+            ],
+            apiKey: dynamic_groq_key
+          })
+        });
+        const data = await response.json();
+        const aiResponse = data.choices[0].message.content;
+        research.aiLog.push({ time: new Date().toLocaleTimeString(), prob: context, tried: tried, q: q, ai: aiResponse });
+        appendMessage("ai", aiResponse);
+        syncInteraction(research.activeTab, 'ai_chat', { msg: q, resp: aiResponse, frust: prob.frustrationTime });
+      } catch (err) {
+        appendMessage("ai", "I'm having trouble connecting to my brain. Please check your API key.");
+      }
+
+      document.getElementById('ai-tried').value = ""; document.getElementById('ai-q').value = "";
+      autoSave();
+    }
+
+    function appendMessage(sender, text) {
+      const chat = document.getElementById('chat-history');
+      const div = document.createElement('div');
+      div.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'}`;
+      div.innerHTML = `<div class="p-4 text-xs shadow-sm max-w-[85%] whitespace-pre-line leading-relaxed ${sender === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}">${text}</div>`;
+      chat.appendChild(div); chat.scrollTop = chat.scrollHeight;
+    }
+
+    function renderAILogs() {
+      const body = document.getElementById('data-ai-log-body'); if (!body) return; body.innerHTML = "";
+      research.aiLog.slice().reverse().forEach(log => {
+        const row = body.insertRow(); row.className = "border-b";
+        row.innerHTML = `<td class="p-4 text-[8px] uppercase text-slate-400 font-mono">${log.time}</td><td class="p-4 font-black">${log.prob}</td><td class="p-4 text-slate-600">User: ${log.q}<br><span class="text-blue-600 font-bold">AI: ${log.ai}</span></td>`;
+      });
+    }
+
+    function autoSave() {
+      localStorage.setItem('math_research_v5', JSON.stringify(research));
+      syncSession();
+    }
+
+    function exportCSV() {
+      let csv = "RESEARCH LOG\nMetadata,Value\nSessionID," + research.sessionId + "\nTotalTime," + research.totalTime + "\nConfidence," + research.preStudy.confidence + "\nAI_Prev_Use," + research.preStudy.aiUse + "\nFavSubject," + research.preStudy.favoriteSubject + "\n\n";
+      
+      csv += "PROBLEM_METRICS\nProb,Order,Status,Time(s),Final_Answer,Work_Steps,Frustration_TS,Focus_TS,Transition(s)\n";
+      Object.keys(research.problems).forEach(id => {
+        const p = research.problems[id];
+        const trans = (p.frustrationTime && p.focusTime) ? Math.floor((p.focusTime - p.frustrationTime) / 1000) : 0;
+        csv += `${id},${p.order},${p.status},${p.time},"${(p.answer || '').replace(/"/g, '""')}","${(p.work || '').replace(/"/g, '""')}",${p.frustrationTime || ''},${p.focusTime || ''},${trans}\n`;
+      });
+
+      csv += "\nAI_CHAT_LOG\nTime,Prob,Attempt,Question,AI_Response\n";
+      research.aiLog.forEach(l => { 
+        csv += `"${l.time}","${l.prob}","${l.tried.replace(/"/g, '""')}","${l.q.replace(/"/g, '""')}","${l.ai.replace(/"/g, '""')}"\n`; 
+      });
+      
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `SESS_${research.sessionId}.csv`; link.click();
+    }
+
+    function clearSession() { if (confirm("Clear all data?")) { localStorage.removeItem('math_research_v4'); window.location.reload(); } }
+
+    function toggleAI() {
+      const panel = document.getElementById('ai-panel');
+      const trigger = document.getElementById('ai-trigger');
+      if (panel.style.display === 'flex') {
+        panel.style.display = 'none';
+        trigger.style.display = 'flex';
+      } else {
+        panel.style.display = 'flex';
+        trigger.style.display = 'none';
+      }
+    }
+
+    function openFullScratch() {
+      document.getElementById('scratchpad-modal').classList.remove('hidden');
+      setTimeout(() => {
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        if (research.scratchpad.draw) {
+          const img = new Image();
+          img.onload = () => ctx.drawImage(img, 0, 0);
+          img.src = research.scratchpad.draw;
+        }
+      }, 50);
+    }
+    
+    function closeFullScratch() {
+      document.getElementById('scratchpad-modal').classList.add('hidden');
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
