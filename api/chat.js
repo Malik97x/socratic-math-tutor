@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   }
 
   const { messages, apiKey } = req.body;
-  const keyToUse = process.env.GROQ_API_KEY || apiKey;
+  const keyToUse = process.env.GROQ_API_KEY || process.env.Groq || apiKey;
 
   if (!keyToUse) {
     return res.status(400).json({ error: 'Missing API Key' });
