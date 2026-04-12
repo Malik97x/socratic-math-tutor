@@ -1,0 +1,27 @@
+{
+  "name": "article",
+  "version": "1.0.0",
+  "description": "A comprehensive, research-grade educational platform designed to guide students through complex math problems using Socratic inquiry.",
+  "main": "index.js",
+  "scripts": {
+    "build": "tailwindcss -i ./input.css -o ./dist/output.css --minify",
+    "dev": "tailwindcss -i ./input.css -o ./dist/output.css --watch",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://Malik97x@github.com/Malik97x/socratic-math-tutor.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Malik97x/socratic-math-tutor/issues"
+  },
+  "homepage": "https://github.com/Malik97x/socratic-math-tutor#readme",
+  "devDependencies": {
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.9",
+    "tailwindcss": "^3.4.17"
+  }
+}
