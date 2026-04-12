@@ -4,7 +4,7 @@
   "description": "A comprehensive, research-grade educational platform designed to guide students through complex math problems using Socratic inquiry.",
   "main": "index.js",
   "scripts": {
-    "build": "tailwindcss -i ./input.css -o ./dist/output.css --minify",
+    "build:css": "tailwindcss -i ./input.css -o ./dist/output.css --minify",
     "dev": "tailwindcss -i ./input.css -o ./dist/output.css --watch",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
